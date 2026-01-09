@@ -29,7 +29,7 @@ export default function AICompass() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputText.trim()) return;
 
     const userMessage: Message = {
@@ -39,20 +39,62 @@ export default function AICompass() {
       timestamp: new Date(),
     };
 
+    const currentInput = inputText;
     setMessages([...messages, userMessage]);
     setInputText('');
     setIsTyping(true);
 
-    setTimeout(() => {
+    try {
+      const conversationHistory = messages
+        .filter(msg => msg.id !== 1)
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }]
+        }));
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const apiUrl = `${supabaseUrl}/functions/v1/chat-with-gemini`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          conversationHistory: conversationHistory
+        }),
+      });
+
+      const data = await response.json();
+
+      const aiResponse = data.response || "I apologize, but I'm having trouble connecting right now. Please try again in a moment.";
+
       const aiMessage: Message = {
         id: messages.length + 2,
-        text: "That's interesting! Based on your interests, I'd recommend checking out clubs like the Tech Innovators Club and Robotics & AI Lab. These align well with technology and innovation. Would you like to know more about any specific club?",
+        text: aiResponse,
         sender: 'ai',
         timestamp: new Date(),
       };
+
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error calling Gemini API:', error);
+
+      const errorMessage: Message = {
+        id: messages.length + 2,
+        text: "I apologize, but I'm having trouble connecting right now. Please try again in a moment.",
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
